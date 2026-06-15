@@ -50,9 +50,9 @@ const NEGATIVE_RULES: NegativeRule[] = [
   // drywall / sheetrock → exclude specialty boards unless asked
   {
     trigger: ["drywall", "sheetrock", "gypsum"],
-    explicit: ["high-impact", "hi-impact", "hi impact", "highimpact", "mold", "mould",
-      "abuse", "fire", "type-x", "typex", "type-c", "typec", "moisture", "purple",
-      "humitek", "xp"],
+    explicit: ["impact", "high-impact", "hi-impact", "hi impact", "highimpact",
+      "mold", "mould", "abuse", "fire", "type-x", "typex", "type-c", "typec",
+      "moisture", "purple", "humitek", "xp"],
     exclude: ["high-impact", "high impact", "hi-impact", "hi impact", "xp",
       "mold-resistant", "mold resistant", "abuse-resistant", "abuse resistant",
       "fire-rated", "fire rated", "type x", "type-x", "type c", "type-c",
@@ -124,9 +124,10 @@ function expandReplacements(tokens: string[]): string[] {
   const drywallAccessory = ["tape", "screw", "screws", "mud", "compound",
     "adhesive", "primer", "corner", "sander", "knife", "saw", "lift", "anchor"]
     .some(has);
-  const hasSize = tokens.some(isDimension);
-  if ((has("drywall") || has("sheetrock") || has("gypsum")) && !drywallAccessory &&
-      (has("sheet") || has("sheets") || has("board") || has("panel") || has("wall") || hasSize))
+  // Any non-accessory drywall/sheetrock/gypsum mention means the BOARD itself,
+  // which the catalog calls "gypsum board". (Accessories like tape/mud/screws
+  // are handled separately above and excluded here.)
+  if ((has("drywall") || has("sheetrock") || has("gypsum")) && !drywallAccessory)
     out.push("gypsum board");
   if (has("mud") || (has("joint") && has("compound")) ||
       (has("drywall") && has("compound"))) {
@@ -266,7 +267,9 @@ export async function searchBigCommerce(
   const size = sizeSignature(query);
 
   for (const keyword of keywordCandidates(query)) {
-    const raw = await fetchByKeyword(keyword, size ? Math.max(limit, 12) : limit);
+    // Always pull a wider pool so the size ranking and the specialty filter have
+    // enough candidates to work with (the right item may not be in the first 1-2).
+    const raw = await fetchByKeyword(keyword, Math.max(limit, 12));
     if (!raw.length) continue;
 
     // If the customer named a specific size, honor it first — give them that
