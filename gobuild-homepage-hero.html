@@ -1,44 +1,33 @@
 <!--
   ╔════════════════════════════════════════════════════════════════════════════╗
-  ║  JIMMY VOICE HERO  →  Go Build Supply homepage                             ║
-  ║  This embeds the EXACT "Hey, I'm Jimmy" voice app (the photo) as the hero.  ║
-  ║  Customers talk to the site instead of browsing it.                         ║
+  ║  JIMMY = THE HOMEPAGE  (full screen)  →  Go Build Supply                    ║
+  ║  The homepage shows ONLY Jimmy. Customers talk or type. The only other      ║
+  ║  thing on the page is a slim menu in the top-right (e.g. "Who we are").     ║
   ╠════════════════════════════════════════════════════════════════════════════╣
   ║  FOR THE BIGCOMMERCE AGENT:                                                  ║
-  ║  1) Set JIMMY_URL below to the public https address where the Jimmy app is   ║
-  ║     hosted (no trailing slash), e.g. https://jimmy.gobuildsupply.com         ║
-  ║  2) Put this whole block as the FIRST element of the homepage main content   ║
-  ║     (above the carousel / products) so Jimmy is the hero.                    ║
-  ║       • Stencil: top of templates/pages/home.html                           ║
-  ║       • or Script Manager → location Footer, Pages: Home page only.          ║
-  ║  3) The app must be served over https with microphone allowed — the iframe   ║
-  ║     below already requests mic + autoplay, which is what the voice mic needs.║
+  ║  1) Make the homepage show ONLY this block — remove the carousel, featured  ║
+  ║     products, and any other homepage sections.                              ║
+  ║  2) Keep the header trimmed to a slim top-right menu only (links like       ║
+  ║     "Who we are" and a cart icon). No big logo banner, no search row.       ║
+  ║  3) src uses ?embed=1 so Jimmy's own header/footer are hidden — the store's ║
+  ║     top-right menu is then the only navigation on the page.                 ║
+  ║  4) Keep allow="microphone" (voice needs it). Storefront must be https.     ║
   ╚════════════════════════════════════════════════════════════════════════════╝
 -->
 
 <!-- ▼▼▼ paste from here ▼▼▼ -->
 <div id="jimmy-voice-hero" style="width:100%;background:#FFF7EE;">
-  <div style="max-width:1100px;margin:0 auto;">
-    <iframe
-      id="jimmy-frame"
-      title="Jimmy — talk to Go Build Supply"
-      allow="microphone; autoplay"
-      style="width:100%;height:820px;border:0;display:block;background:#FFF7EE;"
-      src="https://REPLACE-WITH-YOUR-JIMMY-URL"></iframe>
-  </div>
+  <iframe
+    id="jimmy-frame"
+    title="Jimmy — talk to Go Build Supply"
+    allow="microphone; autoplay"
+    style="width:100%;height:92vh;min-height:620px;border:0;display:block;background:#FFF7EE;"
+    src="https://jimmy-voice.onrender.com?embed=1"></iframe>
 </div>
 <script>
 (function(){
   var f = document.getElementById("jimmy-frame");
-  if (f && f.getAttribute("src").indexOf("REPLACE-WITH-YOUR-JIMMY-URL") !== -1){
-    // safety: if not configured, keep it from showing a broken frame
-    f.parentNode.parentNode.style.display = "none";
-    console.warn("[Jimmy] Set JIMMY_URL in the homepage hero snippet.");
-  }
-  // shorter frame on phones so it fits the screen
-  if (f && window.matchMedia && window.matchMedia("(max-width:640px)").matches){
-    f.style.height = "720px";
-  }
+  if (f && window.matchMedia && window.matchMedia("(max-width:640px)").matches){ f.style.height = "88vh"; }
 })();
 </script>
 <!-- ▲▲▲ to here ▲▲▲ -->

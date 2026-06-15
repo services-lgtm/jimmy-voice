@@ -4,7 +4,7 @@ import { publicProcedure, router } from "../_core/trpc";
 import { ENV } from "../_core/env";
 import { invokeLLM } from "../_core/llm";
 import { searchProducts, type ShopifyProduct } from "../shopify";
-import { searchBigCommerce } from "../bigcommerce";
+import { searchBigCommerce, sizeSignature } from "../bigcommerce";
 
 // ─── System Prompt ────────────────────────────────────────────────────────────
 
@@ -86,10 +86,10 @@ Whenever you name specific materials in your reply — even during intake, not j
 <SHOW_PRODUCTS>["drywall sheet", "drywall screws", "joint compound"]</SHOW_PRODUCTS>
 
 CRITICAL — how to write these search terms so the RIGHT product shows up:
-- Use the SIMPLE 2-3 word product name, the way it'd appear on a store shelf label. Just the material.
-- Do NOT add sizes, brands, quantities, or descriptions — those cause wrong matches. Write "drywall sheet" NOT "5/8 inch 4x8 drywall sheet for basement". Write "joint compound" NOT "drywall mud bucket". Write "2x4 lumber" NOT "2x4x8 framing studs".
+- Use a SHORT 2-4 word product name, like a store shelf label.
+- INCLUDE the defining size/spec when it identifies the exact item — this matters a lot for metal framing, lumber, and pipe. Write "3-5/8 metal track", "2x4 lumber", "3/4 pvc pipe", "5/8 drywall". The search understands sizes.
+- Do NOT add brands, quantities, or full sentences. Write "3-5/8 metal track" NOT "ten pieces of 3 5/8 inch 14 gauge metal track for the wall".
 - One clean term per distinct product. Only the 1-4 main items you actually named.
-- Each term must be the actual material itself (e.g. "fiberglass insulation", "drip edge", "deck boards", "roofing shingles"). Never a vague word like "materials" or a full sentence.
 - Skip the block entirely when you haven't named a specific product yet.
 
 PRODUCT CARDS — NEVER COMMENT ON THEM:
@@ -252,7 +252,7 @@ function parseShowProducts(reply: string): { cleaned: string; queries: string[] 
  * Turn Jimmy's raw reply into the spoken text, optional cart data, and the
  * live product photos to show the customer. Strips both control tags before TTS.
  */
-async function processReply(reply: string): Promise<{
+async function processReply(reply: string, userMessage = ""): Promise<{
   spokenReply: string;
   cartData: CartData | null;
   productPreviews: ProductPreview[];
@@ -260,12 +260,20 @@ async function processReply(reply: string): Promise<{
   const { cleaned, queries } = parseShowProducts(reply);
   const { spokenReply, cartData } = parseCartData(cleaned);
 
+  // If the customer named a size (e.g. "3 5/8 track") but Jimmy's single search
+  // term left it out, borrow the size from their message so the right item shows.
+  const userSize = sizeSignature(userMessage);
+  const finalQueries =
+    userSize && queries.length === 1 && !sizeSignature(queries[0])
+      ? [`${userSize} ${queries[0]}`]
+      : queries;
+
   let productPreviews: ProductPreview[] = [];
-  if (queries.length) {
+  if (finalQueries.length) {
     // Use the BigCommerce search with negative-keyword filter so product cards
     // show the standard variant (not specialty) — same filter as pricing context.
     const results = await Promise.all(
-      queries.map((q) => searchBigCommerce(q, 2).catch(() => [] as ShopifyProduct[])),
+      finalQueries.map((q) => searchBigCommerce(q, 2).catch(() => [] as ShopifyProduct[])),
     );
     const seen = new Set<string>();
     productPreviews = results
@@ -433,7 +441,7 @@ export const voiceRouter = router({
       const reply = await callAI(messages);
 
       // 6. Parse spoken text, cart data, and the live product photos to show
-      const { spokenReply, cartData, productPreviews } = await processReply(reply);
+      const { spokenReply, cartData, productPreviews } = await processReply(reply, transcript);
 
       // 7. Synthesize speech using only the spoken part (no control tags)
       const ttsBuffer = await synthesizeSpeech(spokenReply).catch(() => null);
@@ -475,7 +483,7 @@ export const voiceRouter = router({
 
       const reply = await callAI(messages);
 
-      const { spokenReply, cartData, productPreviews } = await processReply(reply);
+      const { spokenReply, cartData, productPreviews } = await processReply(reply, input.message);
 
       // Synthesize speech via ElevenLabs
       const ttsBuffer = await synthesizeSpeech(spokenReply).catch(() => null);
