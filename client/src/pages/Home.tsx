@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import {
   Mic, Volume2, VolumeX, ExternalLink, RotateCcw, AlertCircle,
-  ShoppingCart, CheckCircle2, Loader2, Share2, Package, ChevronDown, ChevronUp, X, HardHat
+  ShoppingCart, CheckCircle2, Loader2, Share2, Package, ChevronDown, ChevronUp, X, HardHat, Send
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { Streamdown } from "streamdown";
@@ -394,11 +394,17 @@ export default function Home() {
 
   // ── tRPC — stable mutate refs ─────────────────────────────────────────────
   const transcribeAndChat = trpc.voice.transcribeAndChat.useMutation();
+  const textChat          = trpc.voice.chat.useMutation();
   const buildCartMutation = trpc.cart.buildCart.useMutation();
   const mutateRef     = useRef(transcribeAndChat.mutateAsync);
+  const textChatRef   = useRef(textChat.mutateAsync);
   const buildCartRef  = useRef(buildCartMutation.mutateAsync);
   useEffect(() => { mutateRef.current    = transcribeAndChat.mutateAsync; }, [transcribeAndChat.mutateAsync]);
+  useEffect(() => { textChatRef.current  = textChat.mutateAsync; }, [textChat.mutateAsync]);
   useEffect(() => { buildCartRef.current = buildCartMutation.mutateAsync; }, [buildCartMutation.mutateAsync]);
+
+  // ── Typed text input (for noisy/quiet places — type instead of speak) ───────
+  const [textInput, setTextInput] = useState("");
 
   // ── Scroll ────────────────────────────────────────────────────────────────
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -665,6 +671,54 @@ export default function Home() {
       if (sessionIdRef.current === thisSession) setIsPending(false);
     }
   }, [clearTout, triggerBuildCart]);
+
+  // ── Send TYPED text (no mic needed — for noisy or quiet places) ─────────────
+  const sendText = useCallback(async (raw: string) => {
+    const text = raw.trim();
+    if (!text || convStateRef.current === "processing") return;
+    unlockAudio();
+    setTextInput("");
+
+    const thisSession = sessionIdRef.current;
+    setConvState("processing");
+    setIsPending(true);
+    setError(null);
+
+    // Show the customer's typed message right away.
+    const history = messagesRef.current.map(m => ({ role: m.role, content: m.content }));
+    setMessages(prev => [...prev, { id: uid(), role: "user", content: text }]);
+
+    try {
+      const result = await textChatRef.current({ message: text, history });
+      if (sessionIdRef.current !== thisSession) return;
+
+      const aiMsg: Message = { id: uid(), role: "assistant", content: result.reply, products: result.productPreviews ?? [] };
+      setMessages(prev => [...prev, aiMsg]);
+      setConvState("responding");
+
+      if (result.cartData?.ready && result.cartData.materials?.length > 0) {
+        triggerBuildCart(result.cartData);
+      }
+
+      const ttsTimeout = setTimeout(() => {
+        if (convStateRef.current === "responding") setConvState("ready");
+      }, 30000);
+      speakRef.current(result.reply, () => {
+        clearTimeout(ttsTimeout);
+        if (sessionIdRef.current === thisSession) setConvState("ready");
+      }, result.audioBase64 ?? null);
+    } catch (err: any) {
+      if (sessionIdRef.current !== thisSession) return;
+      const msg = err?.data?.message || err?.message || "Something went wrong. Please try again.";
+      setError(msg);
+      setConvState("error");
+      setTimeout(() => {
+        if (convStateRef.current === "error") { setError(null); setConvState("ready"); }
+      }, 3000);
+    } finally {
+      if (sessionIdRef.current === thisSession) setIsPending(false);
+    }
+  }, [unlockAudio, triggerBuildCart]);
 
   // ── Init mic ──────────────────────────────────────────────────────────────
   const initMic = useCallback(async () => {
@@ -944,6 +998,36 @@ export default function Home() {
             </button>
 
             <StatusPill state={convState} />
+
+            {/* Type instead of talk — for noisy or quiet places */}
+            <div className="w-full max-w-md mt-1">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="flex-1 h-px bg-zinc-200" />
+                <span className="text-[11px] text-zinc-400 tracking-wide uppercase">or type it</span>
+                <div className="flex-1 h-px bg-zinc-200" />
+              </div>
+              <form
+                onSubmit={(e) => { e.preventDefault(); sendText(textInput); }}
+                className="flex items-center gap-2"
+              >
+                <input
+                  type="text"
+                  value={textInput}
+                  onChange={(e) => setTextInput(e.target.value)}
+                  placeholder="Type your project…  e.g. drywall for a 10×12 room"
+                  disabled={convState === "processing"}
+                  className="flex-1 h-12 rounded-full border border-zinc-200 bg-white px-5 text-sm text-zinc-800 placeholder:text-zinc-400 focus:outline-none focus:border-[#FF5A1F] transition-colors disabled:opacity-60"
+                />
+                <button
+                  type="submit"
+                  disabled={!textInput.trim() || convState === "processing"}
+                  aria-label="Send"
+                  className="w-12 h-12 flex-shrink-0 rounded-full bg-[#FF5A1F] hover:bg-[#E04510] disabled:opacity-40 disabled:hover:bg-[#FF5A1F] text-white flex items-center justify-center transition-all active:scale-95"
+                >
+                  <Send className="w-5 h-5" strokeWidth={2} />
+                </button>
+              </form>
+            </div>
 
             {error && (
               <div className="animate-fade-in flex items-center gap-2 bg-red-50 border border-red-100 rounded-xl px-4 py-3 text-sm text-red-600 max-w-sm text-center">
