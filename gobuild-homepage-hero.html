@@ -1,0 +1,44 @@
+<!--
+  ╔════════════════════════════════════════════════════════════════════════════╗
+  ║  JIMMY VOICE HERO  →  Go Build Supply homepage                             ║
+  ║  This embeds the EXACT "Hey, I'm Jimmy" voice app (the photo) as the hero.  ║
+  ║  Customers talk to the site instead of browsing it.                         ║
+  ╠════════════════════════════════════════════════════════════════════════════╣
+  ║  FOR THE BIGCOMMERCE AGENT:                                                  ║
+  ║  1) Set JIMMY_URL below to the public https address where the Jimmy app is   ║
+  ║     hosted (no trailing slash), e.g. https://jimmy.gobuildsupply.com         ║
+  ║  2) Put this whole block as the FIRST element of the homepage main content   ║
+  ║     (above the carousel / products) so Jimmy is the hero.                    ║
+  ║       • Stencil: top of templates/pages/home.html                           ║
+  ║       • or Script Manager → location Footer, Pages: Home page only.          ║
+  ║  3) The app must be served over https with microphone allowed — the iframe   ║
+  ║     below already requests mic + autoplay, which is what the voice mic needs.║
+  ╚════════════════════════════════════════════════════════════════════════════╝
+-->
+
+<!-- ▼▼▼ paste from here ▼▼▼ -->
+<div id="jimmy-voice-hero" style="width:100%;background:#FFF7EE;">
+  <div style="max-width:1100px;margin:0 auto;">
+    <iframe
+      id="jimmy-frame"
+      title="Jimmy — talk to Go Build Supply"
+      allow="microphone; autoplay"
+      style="width:100%;height:820px;border:0;display:block;background:#FFF7EE;"
+      src="https://REPLACE-WITH-YOUR-JIMMY-URL"></iframe>
+  </div>
+</div>
+<script>
+(function(){
+  var f = document.getElementById("jimmy-frame");
+  if (f && f.getAttribute("src").indexOf("REPLACE-WITH-YOUR-JIMMY-URL") !== -1){
+    // safety: if not configured, keep it from showing a broken frame
+    f.parentNode.parentNode.style.display = "none";
+    console.warn("[Jimmy] Set JIMMY_URL in the homepage hero snippet.");
+  }
+  // shorter frame on phones so it fits the screen
+  if (f && window.matchMedia && window.matchMedia("(max-width:640px)").matches){
+    f.style.height = "720px";
+  }
+})();
+</script>
+<!-- ▲▲▲ to here ▲▲▲ -->
