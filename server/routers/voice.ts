@@ -4,6 +4,7 @@ import { publicProcedure, router } from "../_core/trpc";
 import { ENV } from "../_core/env";
 import { invokeLLM } from "../_core/llm";
 import { searchProducts, type ShopifyProduct } from "../shopify";
+import { searchBigCommerce } from "../bigcommerce";
 
 // ─── System Prompt ────────────────────────────────────────────────────────────
 
@@ -90,6 +91,11 @@ CRITICAL — how to write these search terms so the RIGHT product shows up:
 - One clean term per distinct product. Only the 1-4 main items you actually named.
 - Each term must be the actual material itself (e.g. "fiberglass insulation", "drip edge", "deck boards", "roofing shingles"). Never a vague word like "materials" or a full sentence.
 - Skip the block entirely when you haven't named a specific product yet.
+
+PRODUCT CARDS — NEVER COMMENT ON THEM:
+- The product photos that appear on screen are handled entirely by the system. You have NO visibility into which image or card the customer sees.
+- NEVER mention, reference, explain, or apologize for product images or cards in your spoken response. Do not say things like "the pictures you're seeing" or "the system generated an image" — you have no idea what image showed up.
+- If a product card shows the wrong item, the system will handle it silently. Your job is to keep the conversation moving, not to explain the UI.
 
 WHEN YOU HAVE ENOUGH INFO TO BUILD THE CART:
 At the end of your spoken response, append a JSON block (the user won't hear this, it's parsed by the system):
@@ -256,8 +262,10 @@ async function processReply(reply: string): Promise<{
 
   let productPreviews: ProductPreview[] = [];
   if (queries.length) {
+    // Use the BigCommerce search with negative-keyword filter so product cards
+    // show the standard variant (not specialty) — same filter as pricing context.
     const results = await Promise.all(
-      queries.map((q) => searchProducts(q, 1).catch(() => [] as ShopifyProduct[])),
+      queries.map((q) => searchBigCommerce(q, 2).catch(() => [] as ShopifyProduct[])),
     );
     const seen = new Set<string>();
     productPreviews = results
@@ -276,7 +284,9 @@ async function processReply(reply: string): Promise<{
  * him answer "how much is X?" with a real number.
  */
 async function buildPricingContext(userMessage: string): Promise<string | null> {
-  const products = await searchProducts(userMessage, 5).catch(() => [] as ShopifyProduct[]);
+  // Use BigCommerce with negative-keyword filter so pricing context only shows
+  // standard variants (not specialty) unless the user explicitly asked for them.
+  const products = await searchBigCommerce(userMessage, 5).catch(() => [] as ShopifyProduct[]);
   if (!products.length) return null;
 
   const lines = products
