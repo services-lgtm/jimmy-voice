@@ -28,7 +28,14 @@ const STOP_WORDS = new Set([
   "get", "got", "me", "my", "can", "could", "would", "please", "and", "with",
   "that", "this", "it", "on", "in", "at", "or", "buy", "about", "tell",
   "show", "looking", "give", "got", "a", "per", "each",
+  // units — sizes belong in the product, not the search keyword
+  "inch", "inches", "in.", "ft", "ft.", "feet", "foot", "lb", "lbs", "pound",
 ]);
+
+/** A bare size like "4x8", "5/8", '1/2"' — useless as a standalone search term. */
+function isDimension(t: string): boolean {
+  return /^\d+x\d+$/.test(t) || /^\d+(\.\d+)?\/\d+$/.test(t) || /^[\d/."x-]+$/.test(t);
+}
 
 /**
  * Contractor slang → how Go Build Supply actually names things in the catalog.
@@ -39,16 +46,25 @@ const STOP_WORDS = new Set([
 function expandReplacements(tokens: string[]): string[] {
   const has = (w: string) => tokens.includes(w);
   const out: string[] = [];
-  if ((has("drywall") || has("sheetrock") || has("gypsum")) &&
-      (has("sheet") || has("sheets") || has("board") || has("panel") || has("wall")))
+  // Drywall mud/tape/screws are their own items — don't turn those into board.
+  const drywallAccessory = ["tape", "screw", "screws", "mud", "compound",
+    "adhesive", "primer", "corner", "sander", "knife", "saw", "lift", "anchor"]
+    .some(has);
+  const hasSize = tokens.some(isDimension);
+  if ((has("drywall") || has("sheetrock") || has("gypsum")) && !drywallAccessory &&
+      (has("sheet") || has("sheets") || has("board") || has("panel") || has("wall") || hasSize))
     out.push("gypsum board");
   if (has("mud") || (has("joint") && has("compound")) ||
       (has("drywall") && has("compound"))) {
     out.push("drywall joint compound", "joint compound");
   }
-  // "2x4 stud" — the bare dimension finds real lumber; "stud" pulls in insulation.
-  const dim = tokens.find((t) => /^\d+x\d+$/.test(t));
-  if (dim && (has("stud") || has("studs"))) out.push(dim);
+  // The store writes lumber sizes longhand: "2x4" is catalogued as "2 in. x 4 in.".
+  // Convert any NxM size to that form so studs/lumber match the real product.
+  const dimTok = tokens.find((t) => /^\d+x\d+$/.test(t));
+  if (dimTok) {
+    const m = dimTok.match(/^(\d+)x(\d+)$/);
+    if (m) out.push(`${m[1]} in. x ${m[2]} in.`);
+  }
   // Wall insulation is catalogued as "fiberglass insulation"; bare "insulation"
   // returns pipe insulation first.
   if (has("insulation") && !has("pipe") && !has("foam"))
@@ -76,16 +92,22 @@ function keywordCandidates(query: string): string[] {
 
   if (!tokens.length) return [query.trim()].filter(Boolean);
 
+  // The material words (drywall, lumber…) without bare sizes. A size alone like
+  // "4x8" matches random products, so it must never be a standalone search.
+  const words = tokens.filter((t) => !isDimension(t));
+
   const candidates = [
     ...expandReplacements(tokens),  // catalog terms for slang the store doesn't use
     tokens.join(" "),               // all meaningful words
-    tokens.slice(0, 2).join(" "),   // leading two (e.g. "2x4 framing")
-    tokens.slice(-2).join(" "),     // trailing two (usually the product)
-    tokens[0],                      // the first key word (e.g. "2x4")
-    tokens.slice(-1).join(" "),     // the single key noun
+    words.slice(0, 2).join(" "),    // leading two real words
+    words.slice(-2).join(" "),      // trailing two real words (usually the product)
+    words[0],                       // the first real material word (never a size)
+    words.slice(-1).join(" "),      // the single key noun
     ...expandFallbacks(tokens),     // generalize only if nothing specific hit
   ];
-  return Array.from(new Set(candidates)).filter(Boolean);
+  // Drop empties and any candidate that is nothing but a dimension.
+  return Array.from(new Set(candidates))
+    .filter((c) => c && !isDimension(c.trim()));
 }
 
 async function fetchByKeyword(keyword: string, limit: number): Promise<ShopifyProduct[]> {
