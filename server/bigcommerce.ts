@@ -50,12 +50,13 @@ const NEGATIVE_RULES: NegativeRule[] = [
   // drywall / sheetrock → exclude specialty boards unless asked
   {
     trigger: ["drywall", "sheetrock", "gypsum"],
-    explicit: ["high-impact", "highimpact", "mold", "mould", "abuse", "fire", "type-x",
-      "typex", "type-c", "typec", "moisture", "purple", "humitek"],
-    exclude: ["high-impact", "high impact", "mold-resistant", "mold resistant",
-      "abuse-resistant", "abuse resistant", "fire-rated", "fire rated",
-      "type x", "type-x", "type c", "type-c", "moisture resistant",
-      "moisture-resistant", "purple board", "humitek"],
+    explicit: ["high-impact", "hi-impact", "hi impact", "highimpact", "mold", "mould",
+      "abuse", "fire", "type-x", "typex", "type-c", "typec", "moisture", "purple",
+      "humitek", "xp"],
+    exclude: ["high-impact", "high impact", "hi-impact", "hi impact", "xp",
+      "mold-resistant", "mold resistant", "abuse-resistant", "abuse resistant",
+      "fire-rated", "fire rated", "type x", "type-x", "type c", "type-c",
+      "moisture resistant", "moisture-resistant", "purple board", "humitek"],
   },
   // screws — "drywall screws" should NOT return self-drilling / tek / metal-stud screws
   {
@@ -268,17 +269,21 @@ export async function searchBigCommerce(
     const raw = await fetchByKeyword(keyword, size ? Math.max(limit, 12) : limit);
     if (!raw.length) continue;
 
-    // Negative-keyword filter: drop specialty variants the user didn't ask for.
-    // If that removes everything, keep the raw results (store may only carry it).
-    const filtered = raw.filter((p) => !isSpecialtyVariant(query, p.title));
-    const pool = filtered.length > 0 ? filtered : raw;
-
-    // Size-aware ranking: float exact-size matches ("3-5/8") to the top.
+    // If the customer named a specific size, honor it first — give them that
+    // exact size even if the only thing the store stocks in it is a "specialty"
+    // variant. Prefer a standard variant within the size matches when one exists.
     if (size) {
-      const hit = (p: ShopifyProduct) => (normalizeSizes(p.title).includes(size) ? 1 : 0);
-      return [...pool].sort((a, b) => hit(b) - hit(a)).slice(0, limit);
+      const sizeHits = raw.filter((p) => normalizeSizes(p.title).includes(size));
+      if (sizeHits.length) {
+        const clean = sizeHits.filter((p) => !isSpecialtyVariant(query, p.title));
+        return (clean.length ? clean : sizeHits).slice(0, limit);
+      }
     }
-    return pool.slice(0, limit);
+
+    // No specific size (or none matched): drop specialty variants the user didn't
+    // ask for. If that removes everything, keep raw (store may only carry it).
+    const filtered = raw.filter((p) => !isSpecialtyVariant(query, p.title));
+    return (filtered.length ? filtered : raw).slice(0, limit);
   }
   return [];
 }

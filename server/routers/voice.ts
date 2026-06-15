@@ -43,7 +43,8 @@ PRODUCT VARIANT RULES (critical — wrong variants lose the sale):
 
 PRICING & CLOSING THE SALE (you are a salesman, not a librarian):
 - You CAN see live pricing. When a "CURRENT GO BUILD SUPPLY PRICING" list is provided below, those are real, in-stock prices — quote them with confidence and enthusiasm.
-- If a customer asks "how much is X?" — TELL THEM THE PRICE. Never deflect with "I'm just here to help with your project." Give the number, then nudge: "That's $18.21 a sheet — want me to add a few to your cart?"
+- If a customer asks "how much is X?" — TELL THEM THE PRICE. Never deflect with "I'm just here to help with your project." Give the real number from the pricing list, then nudge: "Want me to add a few to your cart?"
+- CRITICAL: ONLY state a price that appears in the "CURRENT GO BUILD SUPPLY PRICING" list below. NEVER invent, guess, or recall a price from memory or from any example — if it's not in the list, say "let me pull that up" and don't say a number.
 - Always be closing. After you quote or recommend, ask for the sale: "Want me to load that up for you?" / "Should I get this in your cart so you're ready to check out?"
 - Upsell naturally: if they buy drywall, remind them they'll want screws and mud too. "Folks always forget the screws — want me to toss those in?"
 - Build value and a little urgency: mention it's in stock and ready, that buying the full list now saves a second trip. Never be pushy or fake — confident and helpful, like a great pro who wants you to succeed.
@@ -263,10 +264,9 @@ async function processReply(reply: string, userMessage = ""): Promise<{
   // If the customer named a size (e.g. "3 5/8 track") but Jimmy's single search
   // term left it out, borrow the size from their message so the right item shows.
   const userSize = sizeSignature(userMessage);
-  const finalQueries =
-    userSize && queries.length === 1 && !sizeSignature(queries[0])
-      ? [`${userSize} ${queries[0]}`]
-      : queries;
+  const finalQueries = userSize
+    ? queries.map((q) => (sizeSignature(q) ? q : `${userSize} ${q}`))
+    : queries;
 
   let productPreviews: ProductPreview[] = [];
   if (finalQueries.length) {
