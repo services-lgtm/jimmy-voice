@@ -111,6 +111,17 @@ export function sizeSignature(query: string): string | null {
   return m ? m[0] : null;
 }
 
+/** ALL sizes in a query — a term like "5/8 drywall 4x8" carries thickness AND sheet size. */
+function sizeSignatures(query: string): string[] {
+  const q = normalizeSizes(query);
+  const out: string[] = [];
+  for (const re of [/\d+-\d+\/\d+/g, /\d+x\d+/g, /\d+\/\d+/g]) {
+    const m = q.match(re);
+    if (m) out.push(...m);
+  }
+  return Array.from(new Set(out));
+}
+
 /**
  * Contractor slang → how Go Build Supply actually names things in the catalog.
  * REPLACEMENTS are tried first (the slang word isn't in the catalog at all,
@@ -264,7 +275,7 @@ export async function searchBigCommerce(
   // If the customer named a specific size (e.g. "3-5/8"), the store's relevance
   // alone returns the wrong size first — so pull a wider pool and float the
   // products whose name actually contains that size to the top.
-  const size = sizeSignature(query);
+  const sizes = sizeSignatures(query);
 
   for (const keyword of keywordCandidates(query)) {
     // Always pull a wider pool so the size ranking and the specialty filter have
@@ -272,11 +283,15 @@ export async function searchBigCommerce(
     const raw = await fetchByKeyword(keyword, Math.max(limit, 12));
     if (!raw.length) continue;
 
-    // If the customer named a specific size, honor it first — give them that
-    // exact size even if the only thing the store stocks in it is a "specialty"
-    // variant. Prefer a standard variant within the size matches when one exists.
-    if (size) {
-      const sizeHits = raw.filter((p) => normalizeSizes(p.title).includes(size));
+    // If the customer named a size, honor it first — match on ANY size in the
+    // query (a term like "5/8 drywall 4x8" has both thickness and sheet size).
+    // Give them that exact size even if the only thing stocked in it is a
+    // "specialty" variant; prefer a standard variant when one exists in the size.
+    if (sizes.length) {
+      const sizeHits = raw.filter((p) => {
+        const t = normalizeSizes(p.title);
+        return sizes.some((s) => t.includes(s));
+      });
       if (sizeHits.length) {
         const clean = sizeHits.filter((p) => !isSpecialtyVariant(query, p.title));
         return (clean.length ? clean : sizeHits).slice(0, limit);
