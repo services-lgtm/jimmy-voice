@@ -32,6 +32,97 @@ const STOP_WORDS = new Set([
   "inch", "inches", "in.", "ft", "ft.", "feet", "foot", "lb", "lbs", "pound",
 ]);
 
+// ─── Negative-keyword filter ──────────────────────────────────────────────────
+//
+// When a user asks for a "regular" or unmodified product, we exclude specialty
+// variants from the results UNLESS the user explicitly requested them.
+//
+// Each entry maps a product category (detected from the query) to the specialty
+// terms that should be excluded when the user has NOT asked for them.
+
+type NegativeRule = {
+  /** Tokens that must appear in the query for this rule to activate. */
+  trigger: string[];
+  /** Tokens that, if present in the query, DISABLE this rule (user explicitly asked for the variant). */
+  explicit: string[];
+  /** Lowercase substrings to exclude from product titles/SKUs. */
+  exclude: string[];
+};
+
+const NEGATIVE_RULES: NegativeRule[] = [
+  // drywall / sheetrock → exclude specialty boards unless asked
+  {
+    trigger: ["drywall", "sheetrock", "gypsum"],
+    explicit: [
+      "high-impact", "highimpact", "mold", "mould", "abuse", "fire", "type-x",
+      "typex", "type-c", "typec", "moisture", "purple", "humitek",
+    ],
+    exclude: [
+      "high-impact", "high impact", "mold-resistant", "mold resistant",
+      "abuse-resistant", "abuse resistant", "fire-rated", "fire rated",
+      "type x", "type-x", "type c", "type-c", "moisture resistant",
+      "moisture-resistant", "purple board", "humitek",
+    ],
+  },
+  // screws — "drywall screws" should NOT return self-drilling / tek / metal-stud screws
+  {
+    trigger: ["screw", "screws"],
+    explicit: [
+      "self-drilling", "selfdrilling", "self-tap", "selftap", "tek",
+      "metal stud", "metal-stud", "sheet metal",
+    ],
+    exclude: [
+      "self-drilling", "self drilling", "self-tapping", "self tapping",
+      "tek screw", "tek-screw", "metal stud screw", "sheet metal screw",
+    ],
+  },
+  // lumber / studs / 2x4 / 2x6 → exclude treated/specialty unless asked
+  {
+    trigger: ["lumber", "stud", "studs", "2x4", "2x6", "2x8", "2x10", "2x12", "board", "boards"],
+    explicit: [
+      "treated", "pressure-treated", "pt", "cedar", "redwood",
+      "composite", "fire-retardant", "fire retardant",
+    ],
+    exclude: [
+      "pressure-treated", "pressure treated", "treated lumber", "treated board",
+      " pt ", "cedar", "redwood", "composite", "fire-retardant", "fire retardant",
+    ],
+  },
+  // nails → exclude specialty nails unless asked
+  {
+    trigger: ["nail", "nails"],
+    explicit: ["roofing", "concrete", "masonry", "ring", "spiral", "galvanized"],
+    exclude: [
+      "roofing nail", "concrete nail", "masonry nail",
+    ],
+  },
+];
+
+/**
+ * Given the original user query and a product title/SKU, returns true if the
+ * product should be EXCLUDED based on the negative-keyword rules.
+ */
+function isSpecialtyVariant(query: string, productTitle: string): boolean {
+  const queryLower = query.toLowerCase();
+  const titleLower = productTitle.toLowerCase();
+
+  for (const rule of NEGATIVE_RULES) {
+    // Does this query match the trigger category?
+    const triggered = rule.trigger.some((t) => queryLower.includes(t));
+    if (!triggered) continue;
+
+    // Did the user explicitly ask for the specialty variant? If so, allow it.
+    const userWantsIt = rule.explicit.some((e) => queryLower.includes(e));
+    if (userWantsIt) continue;
+
+    // User asked for the basic version — exclude if the product title contains a specialty term.
+    const isSpecialty = rule.exclude.some((e) => titleLower.includes(e));
+    if (isSpecialty) return true;
+  }
+
+  return false;
+}
+
 /** A bare size like "4x8", "5/8", '1/2"' — useless as a standalone search term. */
 function isDimension(t: string): boolean {
   return /^\d+x\d+$/.test(t) || /^\d+(\.\d+)?\/\d+$/.test(t) || /^[\d/."x-]+$/.test(t);
@@ -114,9 +205,11 @@ async function fetchByKeyword(keyword: string, limit: number): Promise<ShopifyPr
   const base = `https://api.bigcommerce.com/stores/${ENV.bcStoreHash}/v3`;
   // No is_visible filter: the store is still "Coming Soon", so many real
   // products aren't published to the storefront yet but should still be findable.
+  // Fetch extra results so we have room to filter out specialty variants.
+  const fetchLimit = Math.min(limit * 4, 50);
   const url =
     `${base}/catalog/products?keyword=${encodeURIComponent(keyword)}` +
-    `&limit=${limit}&include=images,variants`;
+    `&limit=${fetchLimit}&include=images,variants`;
 
   let res: Response;
   try {
@@ -170,9 +263,11 @@ async function fetchByKeyword(keyword: string, limit: number): Promise<ShopifyPr
 }
 
 /**
- * Search real products on BigCommerce. Cleans conversational filler and retries
- * with fewer keywords until it finds matches. Returns the same product shape the
- * rest of the app already uses, so nothing downstream changes.
+ * Search real products on BigCommerce. Cleans conversational filler, retries
+ * with fewer keywords until it finds matches, and filters out specialty variants
+ * when the user asked for a basic/standard product.
+ *
+ * Returns the same product shape the rest of the app already uses.
  */
 export async function searchBigCommerce(
   query: string,
@@ -183,8 +278,17 @@ export async function searchBigCommerce(
   // Try each keyword candidate in priority order; the store's own search
   // relevance is good once it gets the right words, so we trust its ordering.
   for (const keyword of keywordCandidates(query)) {
-    const results = await fetchByKeyword(keyword, limit);
-    if (results.length) return results;
+    const raw = await fetchByKeyword(keyword, limit);
+    if (!raw.length) continue;
+
+    // Apply negative-keyword filter: remove specialty variants the user didn't ask for.
+    const filtered = raw.filter((p) => !isSpecialtyVariant(query, p.title));
+
+    // If filtering removed everything, fall back to the unfiltered results rather
+    // than returning nothing (the store may only carry the specialty version).
+    const results = filtered.length > 0 ? filtered : raw;
+
+    return results.slice(0, limit);
   }
   return [];
 }
