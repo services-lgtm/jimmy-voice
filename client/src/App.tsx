@@ -1,7 +1,8 @@
+import { useEffect } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch } from "wouter";
+import { Route, Switch, useLocation } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { CartProvider } from "./contexts/CartContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -15,6 +16,15 @@ import CartPage from "./pages/gbs/CartPage";
 import PalletDealsPage from "./pages/gbs/PalletDealsPage";
 import AccountPage from "./pages/gbs/AccountPage";
 import CalculatorsPage from "./pages/gbs/CalculatorsPage";
+
+/** Start each page at the top when navigating (SPA keeps scroll otherwise). */
+function ScrollToTop() {
+  const [location] = useLocation();
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [location]);
+  return null;
+}
 
 function Router() {
   return (
@@ -70,6 +80,7 @@ function App() {
         <TooltipProvider>
           <CartProvider>
             <Toaster />
+            <ScrollToTop />
             <Router />
           </CartProvider>
         </TooltipProvider>
