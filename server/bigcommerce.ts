@@ -202,17 +202,38 @@ function keywordCandidates(query: string): string[] {
     .filter((c) => c && !isDimension(c.trim()));
 }
 
-async function fetchByKeyword(keyword: string, limit: number): Promise<ShopifyProduct[]> {
-  const base = `https://api.bigcommerce.com/stores/${ENV.bcStoreHash}/v3`;
-  // No is_visible filter: the store is still "Coming Soon", so many real
-  // products aren't published to the storefront yet but should still be findable.
-  const url =
-    `${base}/catalog/products?keyword=${encodeURIComponent(keyword)}` +
-    `&limit=${limit}&include=images,variants`;
+function mapBcProduct(p: any): ShopifyProduct {
+  const storeUrl = (ENV.bcStoreUrl || "https://gobuildsupply.com").replace(/\/+$/, "");
+  // calculated_price reflects sales/rules; fall back to base price.
+  const priceNum =
+    typeof p.calculated_price === "number" && p.calculated_price > 0
+      ? p.calculated_price
+      : p.price ?? 0;
+  const firstVariant = Array.isArray(p.variants) ? p.variants[0] : null;
+  const firstImage =
+    (Array.isArray(p.images) ? p.images.find((i: any) => i.is_thumbnail) ?? p.images[0] : null) ?? null;
+  const path = p.custom_url?.url ?? `/${p.id}`;
 
+  return {
+    id: p.id,
+    title: p.name,
+    handle: String(p.id),
+    price: Number(priceNum).toFixed(2),
+    compare_at_price:
+      p.sale_price && p.price && p.sale_price < p.price ? Number(p.price).toFixed(2) : null,
+    image: firstImage?.url_standard ?? firstImage?.url_thumbnail ?? null,
+    url: `${storeUrl}${path}`,
+    available: p.availability !== "disabled" && (p.inventory_level == null || p.inventory_level > 0),
+    variantId: firstVariant?.id ?? p.id,
+    sku: p.sku || firstVariant?.sku || null,
+  };
+}
+
+async function bcGet(pathAndQuery: string): Promise<any | null> {
+  const base = `https://api.bigcommerce.com/stores/${ENV.bcStoreHash}/v3`;
   let res: Response;
   try {
-    res = await fetch(url, {
+    res = await fetch(`${base}${pathAndQuery}`, {
       headers: {
         "X-Auth-Token": ENV.bcAccessToken,
         Accept: "application/json",
@@ -221,44 +242,174 @@ async function fetchByKeyword(keyword: string, limit: number): Promise<ShopifyPr
     });
   } catch (err) {
     console.error(`[BigCommerce] Network error: ${err}`);
-    return [];
+    return null;
   }
-
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    console.error(`[BigCommerce] Search failed: ${res.status} ${body.slice(0, 160)}`);
-    return [];
+    console.error(`[BigCommerce] Request failed: ${res.status} ${body.slice(0, 160)}`);
+    return null;
   }
+  return res.json();
+}
 
-  const json = (await res.json()) as { data?: any[] };
-  const products = json?.data ?? [];
-  const storeUrl = (ENV.bcStoreUrl || "https://gobuildsupply.com").replace(/\/+$/, "");
+async function fetchByKeyword(keyword: string, limit: number): Promise<ShopifyProduct[]> {
+  // No is_visible filter: the store is still "Coming Soon", so many real
+  // products aren't published to the storefront yet but should still be findable.
+  const json = (await bcGet(
+    `/catalog/products?keyword=${encodeURIComponent(keyword)}&limit=${limit}&include=images,variants`,
+  )) as { data?: any[] } | null;
+  return (json?.data ?? []).map(mapBcProduct);
+}
 
-  return products.map((p: any): ShopifyProduct => {
-    // calculated_price reflects sales/rules; fall back to base price.
-    const priceNum =
-      typeof p.calculated_price === "number" && p.calculated_price > 0
-        ? p.calculated_price
-        : p.price ?? 0;
-    const firstVariant = Array.isArray(p.variants) ? p.variants[0] : null;
-    const firstImage =
-      (Array.isArray(p.images) ? p.images.find((i: any) => i.is_thumbnail) ?? p.images[0] : null) ?? null;
-    const path = p.custom_url?.url ?? `/${p.id}`;
+/** Plain catalog listing (no keyword) — for the website's browse/featured grids. */
+export async function listBigCommerceProducts(
+  page = 1,
+  limit = 12,
+  categoryIds?: number[],
+): Promise<ShopifyProduct[]> {
+  if (!isBigCommerceConfigured()) return [];
+  const catFilter = categoryIds?.length
+    ? `&categories:in=${categoryIds.slice(0, 60).join(",")}`
+    : "";
+  const json = (await bcGet(
+    `/catalog/products?limit=${limit}&page=${page}&include=images,variants&sort=total_sold&direction=desc${catFilter}`,
+  )) as { data?: any[] } | null;
+  return (json?.data ?? []).map(mapBcProduct);
+}
 
-    return {
-      id: p.id,
-      title: p.name,
-      handle: String(p.id),
-      price: Number(priceNum).toFixed(2),
-      compare_at_price:
-        p.sale_price && p.price && p.sale_price < p.price ? Number(p.price).toFixed(2) : null,
-      image: firstImage?.url_standard ?? firstImage?.url_thumbnail ?? null,
-      url: `${storeUrl}${path}`,
-      available: p.availability !== "disabled" && (p.inventory_level == null || p.inventory_level > 0),
-      variantId: firstVariant?.id ?? p.id,
-      sku: p.sku || firstVariant?.sku || null,
-    };
-  });
+/** Total products / categories / brands — for the homepage stats bar. */
+export async function getBcCounts(): Promise<{ products: number; categories: number; brands: number }> {
+  if (!isBigCommerceConfigured()) return { products: 0, categories: 0, brands: 0 };
+  const total = (json: any) => json?.meta?.pagination?.total ?? 0;
+  const [p, c, b] = await Promise.all([
+    bcGet(`/catalog/products?limit=1`),
+    bcGet(`/catalog/categories?limit=1`),
+    bcGet(`/catalog/brands?limit=1`),
+  ]);
+  return { products: total(p), categories: total(c), brands: total(b) };
+}
+
+export type BcCategory = {
+  id: number;
+  name: string;
+  parentId: number;
+  isVisible: boolean;
+  sortOrder: number;
+};
+
+/** All store categories (paginated fetch). */
+export async function listBigCommerceCategories(): Promise<BcCategory[]> {
+  if (!isBigCommerceConfigured()) return [];
+  const all: BcCategory[] = [];
+  for (let page = 1; page <= 5; page++) {
+    const json = (await bcGet(`/catalog/categories?limit=250&page=${page}`)) as {
+      data?: any[];
+      meta?: { pagination?: { total_pages?: number } };
+    } | null;
+    const rows = json?.data ?? [];
+    all.push(
+      ...rows.map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        parentId: c.parent_id,
+        isVisible: c.is_visible !== false,
+        sortOrder: c.sort_order ?? 0,
+      })),
+    );
+    const totalPages = json?.meta?.pagination?.total_pages ?? 1;
+    if (page >= totalPages) break;
+  }
+  return all;
+}
+
+export type ProductDetails = ShopifyProduct & {
+  images: string[];
+  brand: string | null;
+  specs: Array<{ label: string; value: string }>;
+  categoryIds: number[];
+};
+
+const brandCache = new Map<number, string | null>();
+
+async function getBrandName(brandId: number): Promise<string | null> {
+  if (!brandId) return null;
+  if (brandCache.has(brandId)) return brandCache.get(brandId)!;
+  const json = (await bcGet(`/catalog/brands/${brandId}`)) as { data?: { name?: string } } | null;
+  const name = json?.data?.name ?? null;
+  brandCache.set(brandId, name);
+  return name;
+}
+
+/** Fetch a single product with everything the product page shows. */
+export async function getBigCommerceProduct(id: number): Promise<ProductDetails | null> {
+  if (!isBigCommerceConfigured()) return null;
+  const json = (await bcGet(
+    `/catalog/products/${id}?include=images,variants,custom_fields`,
+  )) as { data?: any } | null;
+  const p = json?.data;
+  if (!p) return null;
+
+  const images: string[] = (Array.isArray(p.images) ? p.images : [])
+    .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+    .map((i: any) => i.url_standard ?? i.url_thumbnail)
+    .filter(Boolean);
+
+  const specs: Array<{ label: string; value: string }> = [];
+  for (const f of Array.isArray(p.custom_fields) ? p.custom_fields : []) {
+    if (f?.name && f?.value) specs.push({ label: String(f.name), value: String(f.value) });
+  }
+  if (p.weight > 0) specs.push({ label: "Weight", value: `${p.weight} lb` });
+  if (p.width > 0 && p.height > 0 && p.depth > 0) {
+    specs.push({ label: "Dimensions", value: `${p.width} × ${p.height} × ${p.depth} in` });
+  }
+  if (p.mpn) specs.push({ label: "MPN", value: String(p.mpn) });
+  if (p.upc) specs.push({ label: "UPC", value: String(p.upc) });
+
+  const brand = await getBrandName(p.brand_id ?? 0).catch(() => null);
+
+  return {
+    ...mapBcProduct(p),
+    description: p.description || null,
+    images,
+    brand,
+    specs,
+    categoryIds: Array.isArray(p.categories) ? p.categories : [],
+  };
+}
+
+/**
+ * Create a real BigCommerce cart from line items and return the hosted
+ * checkout URL. Requires the API token to have the "Carts" scope — if it
+ * doesn't, this returns null and the caller should fall back gracefully.
+ */
+export async function createBigCommerceCheckout(
+  lines: Array<{ productId: number; quantity: number }>,
+): Promise<string | null> {
+  if (!isBigCommerceConfigured() || !lines.length) return null;
+  const base = `https://api.bigcommerce.com/stores/${ENV.bcStoreHash}/v3`;
+  try {
+    const res = await fetch(`${base}/carts?include=redirect_urls`, {
+      method: "POST",
+      headers: {
+        "X-Auth-Token": ENV.bcAccessToken,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        line_items: lines.map((l) => ({ product_id: l.productId, quantity: l.quantity })),
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      console.error(`[BigCommerce] Cart create failed: ${res.status} ${body.slice(0, 160)}`);
+      return null;
+    }
+    const json = (await res.json()) as { data?: { redirect_urls?: { checkout_url?: string; cart_url?: string } } };
+    return json?.data?.redirect_urls?.checkout_url ?? json?.data?.redirect_urls?.cart_url ?? null;
+  } catch (err) {
+    console.error(`[BigCommerce] Cart create error: ${err}`);
+    return null;
+  }
 }
 
 /**

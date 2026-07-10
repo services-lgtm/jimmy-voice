@@ -12,3 +12,6 @@
  *   });
  *   export type SavedCart = typeof savedCarts.$inferSelect;
  */
+
+// No tables yet — this export keeps the file a module for `export type *`.
+export {};

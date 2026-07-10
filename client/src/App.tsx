@@ -3,14 +3,51 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
+import { CartProvider } from "./contexts/CartContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import Layout from "./components/gbs/Layout";
 import Home from "./pages/Home";
+import HomePage from "./pages/gbs/HomePage";
+import ShopPage from "./pages/gbs/ShopPage";
+import ProductPage from "./pages/gbs/ProductPage";
+import JimmyPage from "./pages/gbs/JimmyPage";
+import CartPage from "./pages/gbs/CartPage";
+import PalletDealsPage from "./pages/gbs/PalletDealsPage";
+import AccountPage from "./pages/gbs/AccountPage";
+import CalculatorsPage from "./pages/gbs/CalculatorsPage";
 
 function Router() {
-  // make sure to consider if you need authentication for certain routes
   return (
     <Switch>
-      <Route path={"/"} component={Home} />
+      {/* Legacy voice widget (embedded on the old homepage hero) */}
+      <Route path={"/voice"} component={Home} />
+
+      {/* GBS website */}
+      <Route path={"/"}>
+        <Layout><HomePage /></Layout>
+      </Route>
+      <Route path={"/shop"}>
+        <Layout><ShopPage /></Layout>
+      </Route>
+      <Route path={"/product/:id"}>
+        <Layout><ProductPage /></Layout>
+      </Route>
+      <Route path={"/jimmy"}>
+        <Layout><JimmyPage /></Layout>
+      </Route>
+      <Route path={"/cart"}>
+        <Layout><CartPage /></Layout>
+      </Route>
+      <Route path={"/pallet-deals"}>
+        <Layout><PalletDealsPage /></Layout>
+      </Route>
+      <Route path={"/calculators"}>
+        <Layout><CalculatorsPage /></Layout>
+      </Route>
+      <Route path={"/account"}>
+        <Layout><AccountPage /></Layout>
+      </Route>
+
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />
@@ -31,8 +68,10 @@ function App() {
         // switchable
       >
         <TooltipProvider>
-          <Toaster />
-          <Router />
+          <CartProvider>
+            <Toaster />
+            <Router />
+          </CartProvider>
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>

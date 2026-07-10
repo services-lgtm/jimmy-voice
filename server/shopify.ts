@@ -24,6 +24,8 @@ export type ShopifyProduct = {
   available: boolean;
   variantId: number | null;
   sku: string | null;
+  /** Store-authored HTML — only populated on single-product fetches. */
+  description?: string | null;
 };
 
 export type CartItem = {
@@ -49,7 +51,7 @@ export type CartResult = {
 // BigCommerce, not Shopify), so the search API returns nothing. Until the store
 // launches, we fall back to this sample shelf so Jimmy can show real-looking
 // product cards. Set USE_DEMO_PRODUCTS = false once the live catalog is wired up.
-const USE_DEMO_PRODUCTS = true;
+const USE_DEMO_PRODUCTS = false; // store is live (2026-07-10) — never show fake products to real customers
 
 type DemoItem = { keywords: string[]; title: string; price: string };
 
@@ -111,6 +113,25 @@ function demoSearch(query: string, limit: number): ShopifyProduct[] {
     const handle = `demo-${slugify(item.title)}`;
     return {
       id: 900000 + Math.abs(hashCode(handle)) % 90000,
+      title: item.title,
+      handle,
+      price: item.price,
+      compare_at_price: null,
+      image: demoImage(item.title),
+      url: STORE,
+      available: true,
+      variantId: 990000000 + (Math.abs(hashCode(handle)) % 9000000) + i,
+      sku: `DEMO-${slugify(item.title).toUpperCase().replace(/-/g, "").slice(0, 8)}`,
+    };
+  });
+}
+
+/** Full demo shelf as product cards — for browse grids while the store is Coming Soon. */
+export function demoListProducts(limit = 24): ShopifyProduct[] {
+  return DEMO_CATALOG.slice(0, limit).map((item, i) => {
+    const handle = `demo-${slugify(item.title)}`;
+    return {
+      id: 900000 + (Math.abs(hashCode(handle)) % 90000),
       title: item.title,
       handle,
       price: item.price,

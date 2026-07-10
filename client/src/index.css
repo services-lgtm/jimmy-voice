@@ -27,38 +27,58 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-condensed: "Barlow Condensed", var(--font-inter), sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  /* GBS brand palette — from GBS-Developer-Handoff.md */
+  --color-gbs-red: #e8001d;
+  --color-gbs-red-dark: #c0001a;
+  --color-gbs-red-light: #ff1a35;
+  --color-gbs-red-tint: #fff0f2;
+  --color-gbs-black: #111111;
+  --color-gbs-charcoal: #1e1e1e;
+  --color-gbs-gray-900: #2d2d2d;
+  --color-gbs-gray-700: #555555;
+  --color-gbs-gray-500: #888888;
+  --color-gbs-gray-300: #cccccc;
+  --color-gbs-gray-100: #f5f5f5;
+  --color-gbs-success: #16a34a;
+  --color-gbs-warning: #d97706;
+  --color-gbs-info: #2563eb;
+
+  --shadow-red: 0 4px 16px rgba(232, 0, 29, 0.3);
 }
 
 :root {
-  --radius: 0.75rem;
+  --radius: 0.5rem; /* GBS --radius-md 8px */
 
-  /* Light theme — Apple/OpenAI inspired */
-  --background: oklch(0.985 0 0);
-  --foreground: oklch(0.13 0 0);
+  /* GBS light theme — white surfaces, #111 text, red primary */
+  --background: #ffffff;
+  --foreground: #111111;
 
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.13 0 0);
+  --card: #ffffff;
+  --card-foreground: #111111;
 
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.13 0 0);
+  --popover: #ffffff;
+  --popover-foreground: #111111;
 
-  --primary: oklch(0.13 0 0);
-  --primary-foreground: oklch(0.985 0 0);
+  --primary: #e8001d;
+  --primary-foreground: #ffffff;
 
-  --secondary: oklch(0.96 0 0);
-  --secondary-foreground: oklch(0.13 0 0);
+  --secondary: #f5f5f5;
+  --secondary-foreground: #111111;
 
-  --muted: oklch(0.96 0 0);
-  --muted-foreground: oklch(0.5 0 0);
+  --muted: #f5f5f5;
+  --muted-foreground: #888888;
 
-  --accent: oklch(0.96 0 0);
-  --accent-foreground: oklch(0.13 0 0);
+  --accent: #fff0f2;
+  --accent-foreground: #e8001d;
 
-  --destructive: oklch(0.577 0.245 27.325);
+  --destructive: #dc2626;
 
-  --border: oklch(0.92 0 0);
-  --input: oklch(0.92 0 0);
-  --ring: oklch(0.13 0 0);
+  --border: #eeeeee;
+  --input: #cccccc;
+  --ring: #e8001d;
 
   /* Glow color for microphone */
   --mic-glow: oklch(0.55 0.18 250);
@@ -82,6 +102,25 @@
 .container {
   @apply mx-auto px-4 sm:px-6 lg:px-8;
   max-width: 1200px;
+}
+
+/* Scroll-triggered reveal (IntersectionObserver adds .visible) */
+.fade-up {
+  opacity: 0;
+  transform: translateY(24px);
+  transition:
+    opacity 0.6s cubic-bezier(0.23, 1, 0.32, 1),
+    transform 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+}
+.fade-up.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Typewriter caret for the hero search placeholder */
+@keyframes gbs-caret {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
 }
 
 /* Microphone glow pulse animation */
