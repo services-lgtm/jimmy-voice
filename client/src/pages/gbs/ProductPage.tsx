@@ -70,6 +70,7 @@ export default function ProductPage() {
   const brand: string | null = ("brand" in product ? (product as any).brand : null) ?? null;
   const specs: Array<{ label: string; value: string }> =
     ("specs" in product ? (product as any).specs : []) ?? [];
+  const upc = specs.find((s) => s.label.toUpperCase() === "UPC")?.value ?? null;
   const palletUnit = price * (1 - PALLET_DISCOUNT);
 
   return (
@@ -133,8 +134,12 @@ export default function ProductPage() {
           <h1 className="mt-1 font-condensed font-bold text-2xl md:text-3xl text-gbs-black leading-tight">
             {product.title}
           </h1>
-          {product.sku && (
-            <div className="mt-2 text-xs text-gbs-gray-500 font-mono">SKU {product.sku}</div>
+          {(product.sku || upc) && (
+            <div className="mt-2 text-xs text-gbs-gray-500 font-mono">
+              {product.sku && <>SKU {product.sku}</>}
+              {product.sku && upc && <span className="mx-1.5 text-gbs-gray-300">·</span>}
+              {upc && <>UPC {upc}</>}
+            </div>
           )}
           <div className="mt-2 flex items-center gap-2 text-sm">
             <span
