@@ -68,6 +68,36 @@ async function startServer() {
     })
   );
 
+  // ── Zombie service-worker killer ────────────────────────────────────────────
+  // The domain used to run on BigCommerce, which may have registered a service
+  // worker on visitors' phones. That worker can keep intercepting and serving
+  // stale/broken content even after the DNS switch. Browsers re-fetch a
+  // registered worker's script periodically; when they hit these paths we hand
+  // back a worker that clears all caches, unregisters itself, and reloads the
+  // page — permanently evicting the old one. (Serving this file does NOT
+  // register a worker; only browsers that already have one will request it.)
+  const KILL_SW = `
+self.addEventListener('install', function(){ self.skipWaiting(); });
+self.addEventListener('activate', function(e){
+  e.waitUntil((async function(){
+    try { var ks = await caches.keys(); await Promise.all(ks.map(function(k){ return caches.delete(k); })); } catch(_){}
+    try { await self.registration.unregister(); } catch(_){}
+    try { var cs = await self.clients.matchAll({ type:'window' }); cs.forEach(function(c){ c.navigate(c.url); }); } catch(_){}
+  })());
+});`.trim();
+  for (const p of ["/service-worker.js", "/sw.js", "/serviceworker.js", "/worker.js"]) {
+    app.get(p, (_req, res) => {
+      res
+        .status(200)
+        .set({
+          "Content-Type": "application/javascript; charset=utf-8",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          "Service-Worker-Allowed": "/",
+        })
+        .send(KILL_SW);
+    });
+  }
+
   // ── Legacy URL rescue ───────────────────────────────────────────────────────
   // The domain used to run on BigCommerce. Google Shopping, old links, and
   // search results point at the old product/category URLs. Redirect those to
