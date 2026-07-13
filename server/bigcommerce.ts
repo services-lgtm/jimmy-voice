@@ -405,7 +405,13 @@ export async function createBigCommerceCheckout(
       return null;
     }
     const json = (await res.json()) as { data?: { redirect_urls?: { checkout_url?: string; cart_url?: string } } };
-    return json?.data?.redirect_urls?.checkout_url ?? json?.data?.redirect_urls?.cart_url ?? null;
+    const url = json?.data?.redirect_urls?.checkout_url ?? json?.data?.redirect_urls?.cart_url ?? null;
+    if (!url) return null;
+    // The store's configured domain now points at THIS website (headless setup),
+    // so BigCommerce-hosted checkout must run on the store's canonical domain.
+    // Swap when a dedicated checkout domain is registered in BigCommerce.
+    const checkoutHost = `store-${ENV.bcStoreHash}-1.mybigcommerce.com`;
+    return url.replace(/^https:\/\/(www\.)?gobuildsupply\.com/, `https://${checkoutHost}`);
   } catch (err) {
     console.error(`[BigCommerce] Cart create error: ${err}`);
     return null;
