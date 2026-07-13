@@ -198,8 +198,12 @@ function keywordCandidates(query: string): string[] {
     ...expandFallbacks(tokens),     // generalize only if nothing specific hit
   ];
   // Drop empties and any candidate that is nothing but a dimension.
-  return Array.from(new Set(candidates))
-    .filter((c) => c && !isDimension(c.trim()));
+  const uniq = Array.from(new Set(candidates)).filter((c) => c && !isDimension(c.trim()));
+  // Always try the raw query last — SKU-style searches ("58X", "GP58XGMS")
+  // look like dimensions to the filter above but match in the catalog.
+  const raw = query.trim();
+  if (raw && !uniq.includes(raw)) uniq.push(raw);
+  return uniq;
 }
 
 function mapBcProduct(p: any): ShopifyProduct {
@@ -443,6 +447,13 @@ export async function searchBigCommerce(
     // enough candidates to work with (the right item may not be in the first 1-2).
     const raw = await fetchByKeyword(keyword, Math.max(limit, 12));
     if (!raw.length) continue;
+
+    // Exact SKU match wins outright — someone typing a SKU wants that item.
+    const q = query.trim().toLowerCase();
+    raw.sort(
+      (a, b) =>
+        Number((b.sku ?? "").toLowerCase() === q) - Number((a.sku ?? "").toLowerCase() === q),
+    );
 
     // If the customer named a size, honor it first — match on ANY size in the
     // query (a term like "5/8 drywall 4x8" has both thickness and sheet size).
