@@ -13,6 +13,33 @@
   </head>
   <body>
     <div id="root"></div>
+    <!--
+      Migration cleanup: the domain previously ran on BigCommerce, which may have
+      registered a service worker + caches on visitors' devices. Those persist
+      across the DNS switch and would keep serving the old store. Unregister any
+      stale worker and purge caches once, then reload so the new site shows.
+    -->
+    <script>
+      (function () {
+        try {
+          if ("serviceWorker" in navigator) {
+            navigator.serviceWorker.getRegistrations().then(function (regs) {
+              var hadWorker = regs && regs.length > 0;
+              regs.forEach(function (r) { r.unregister(); });
+              if (window.caches && caches.keys) {
+                caches.keys().then(function (keys) {
+                  keys.forEach(function (k) { caches.delete(k); });
+                });
+              }
+              if (hadWorker && !sessionStorage.getItem("gbs-sw-cleared")) {
+                sessionStorage.setItem("gbs-sw-cleared", "1");
+                location.reload();
+              }
+            }).catch(function () {});
+          }
+        } catch (e) {}
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
     <script
       defer
