@@ -9,7 +9,7 @@ import { STORE_URL } from "@/lib/gbs";
 export default function AccountPage() {
   const rows = [
     { icon: History, label: "Order history", href: `${STORE_URL}/account.php`, external: true },
-    { icon: CreditCard, label: "Net 30 terms — apply", href: `${STORE_URL}/contact-us/`, external: true },
+    { icon: CreditCard, label: "Net 30 terms — apply", href: "/net30", external: false },
     { icon: Sparkles, label: "Jimmy AI", href: "/jimmy", external: false },
     { icon: Calculator, label: "Calculators", href: "/calculators", external: false },
     { icon: Users, label: "Workers & crew (coming soon)", href: "/account", external: false },

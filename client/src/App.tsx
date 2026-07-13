@@ -17,6 +17,7 @@ import PalletDealsPage from "./pages/gbs/PalletDealsPage";
 import AccountPage from "./pages/gbs/AccountPage";
 import CalculatorsPage from "./pages/gbs/CalculatorsPage";
 import AdvertisePage from "./pages/gbs/AdvertisePage";
+import Net30Page from "./pages/gbs/Net30Page";
 
 /** Start each page at the top when navigating (SPA keeps scroll otherwise). */
 function ScrollToTop() {
@@ -57,6 +58,9 @@ function Router() {
       </Route>
       <Route path={"/advertise"}>
         <Layout><AdvertisePage /></Layout>
+      </Route>
+      <Route path={"/net30"}>
+        <Layout><Net30Page /></Layout>
       </Route>
       <Route path={"/account"}>
         <Layout><AccountPage /></Layout>
