@@ -58,10 +58,32 @@ export function serveStatic(app: Express) {
     );
   }
 
-  app.use(express.static(distPath));
+  const noCache = "no-cache, no-store, must-revalidate";
 
-  // fall through to index.html if the file doesn't exist
+  // Build assets are content-hashed (index-ABC123.js) — their name changes
+  // whenever the content changes, so they can be cached forever safely.
+  app.use(
+    "/assets",
+    express.static(path.join(distPath, "assets"), {
+      immutable: true,
+      maxAge: "1y",
+    }),
+  );
+
+  // Everything else (favicon, brand images…) with a light default, but the
+  // HTML shell must NEVER be cached — otherwise returning visitors keep an old
+  // index.html that points at a build file that no longer exists (→ 404).
+  app.use(
+    express.static(distPath, {
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith("index.html")) res.setHeader("Cache-Control", noCache);
+      },
+    }),
+  );
+
+  // SPA fallback — always serve a fresh HTML shell so the current build loads.
   app.use("*", (_req, res) => {
+    res.setHeader("Cache-Control", noCache);
     res.sendFile(path.resolve(distPath, "index.html"));
   });
 }
