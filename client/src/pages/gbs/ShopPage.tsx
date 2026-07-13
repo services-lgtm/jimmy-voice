@@ -8,6 +8,7 @@ import { useSearch } from "wouter";
 import { Search, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import ProductCard, { type ProductCardData } from "@/components/gbs/ProductCard";
+import AdBanner from "@/components/gbs/AdBanner";
 
 function useDebounced<T>(value: T, ms: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -171,10 +172,22 @@ export default function ShopPage() {
       ) : products.length ? (
         <>
           <div className="mt-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {products.map((p) => (
+            {products.slice(0, 8).map((p) => (
               <ProductCard key={p.id} product={p} />
             ))}
           </div>
+          {products.length > 8 && (
+            <div className="mt-4">
+              <AdBanner slot="shop-grid" compact />
+            </div>
+          )}
+          {products.length > 8 && (
+            <div className="mt-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {products.slice(8).map((p) => (
+                <ProductCard key={p.id} product={p} />
+              ))}
+            </div>
+          )}
           {hasMore && (
             <div className="mt-8 flex justify-center">
               <button

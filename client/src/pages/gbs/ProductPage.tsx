@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { useCart } from "@/contexts/CartContext";
 import ProductCard from "@/components/gbs/ProductCard";
+import AdBanner from "@/components/gbs/AdBanner";
 
 const PALLET_QTY = 48;
 const PALLET_DISCOUNT = 0.12;
@@ -310,6 +311,11 @@ export default function ProductPage() {
           </div>
         </section>
       )}
+
+      {/* Sponsored slot */}
+      <div className="mt-10">
+        <AdBanner slot="product-below" />
+      </div>
     </div>
   );
 }

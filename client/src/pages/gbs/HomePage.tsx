@@ -18,6 +18,7 @@ import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { categoryStyle } from "@/lib/gbs";
 import ProductCard from "@/components/gbs/ProductCard";
+import AdBanner from "@/components/gbs/AdBanner";
 import HeroSearch from "@/components/gbs/home/HeroSearch";
 import MeetJimmy from "@/components/gbs/home/MeetJimmy";
 import ShopByProject from "@/components/gbs/home/ShopByProject";
@@ -59,6 +60,11 @@ export default function HomePage() {
       <div className="fade-up">
         <ShopByProject />
       </div>
+
+      {/* Sponsored slot */}
+      <section className="container mt-8 fade-up">
+        <AdBanner slot="home-mid" />
+      </section>
 
       {/* Shop by category — live from the store's real tree */}
       <section className="py-16 bg-white fade-up">
@@ -134,6 +140,11 @@ export default function HomePage() {
       <div className="fade-up">
         <DeliveryZones />
       </div>
+
+      {/* Sponsored slot */}
+      <section className="container my-8 fade-up">
+        <AdBanner slot="home-lower" />
+      </section>
 
       <div className="fade-up">
         <KnowledgeCenter />

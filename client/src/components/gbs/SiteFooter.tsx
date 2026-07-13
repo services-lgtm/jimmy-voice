@@ -33,6 +33,7 @@ export default function SiteFooter() {
               </a>
             </li>
             <li><Link href="/account" className="hover:text-gbs-red">Account</Link></li>
+            <li><Link href="/advertise" className="hover:text-gbs-red">Advertise with GBS</Link></li>
           </ul>
         </div>
         <div>
