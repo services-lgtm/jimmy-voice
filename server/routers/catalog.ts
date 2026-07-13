@@ -16,6 +16,10 @@ import {
   type BcCategory,
 } from "../bigcommerce";
 import { demoListProducts, searchProducts, type ShopifyProduct } from "../shopify";
+import { ensureIndex, indexReady, smartSearch } from "../search";
+
+// Warm the smart-search index as soon as the server starts.
+ensureIndex();
 
 // ─── Category cache ───────────────────────────────────────────────────────────
 // The tree changes rarely; cache for 10 minutes to keep pages snappy.
@@ -96,7 +100,11 @@ export const catalogRouter = router({
     )
     .query(async ({ input }) => {
       if (input.query) {
-        const products = await searchProducts(input.query, input.limit);
+        // Smart in-memory search (typo/prefix/SKU/brand aware); falls back to
+        // the BigCommerce keyword search until the index finishes loading.
+        const products = indexReady()
+          ? smartSearch(input.query, input.limit)
+          : await searchProducts(input.query, input.limit);
         return { products, total: products.length };
       }
       if (isBigCommerceConfigured()) {
