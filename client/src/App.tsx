@@ -5,6 +5,7 @@ import NotFound from "@/pages/NotFound";
 import { Route, Switch, useLocation } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { CartProvider } from "./contexts/CartContext";
+import { AuthProvider } from "./contexts/AuthContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Layout from "./components/gbs/Layout";
 import Home from "./pages/Home";
@@ -15,6 +16,7 @@ import JimmyPage from "./pages/gbs/JimmyPage";
 import CartPage from "./pages/gbs/CartPage";
 import PalletDealsPage from "./pages/gbs/PalletDealsPage";
 import AccountPage from "./pages/gbs/AccountPage";
+import SignInPage from "./pages/gbs/SignInPage";
 import CalculatorsPage from "./pages/gbs/CalculatorsPage";
 import AdvertisePage from "./pages/gbs/AdvertisePage";
 import Net30Page from "./pages/gbs/Net30Page";
@@ -65,6 +67,9 @@ function Router() {
       <Route path={"/account"}>
         <Layout><AccountPage /></Layout>
       </Route>
+      <Route path={"/signin"}>
+        <Layout><SignInPage /></Layout>
+      </Route>
 
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
@@ -86,11 +91,13 @@ function App() {
         // switchable
       >
         <TooltipProvider>
-          <CartProvider>
-            <Toaster />
-            <ScrollToTop />
-            <Router />
-          </CartProvider>
+          <AuthProvider>
+            <CartProvider>
+              <Toaster />
+              <ScrollToTop />
+              <Router />
+            </CartProvider>
+          </AuthProvider>
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>
