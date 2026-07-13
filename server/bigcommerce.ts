@@ -266,15 +266,19 @@ export async function listBigCommerceProducts(
   page = 1,
   limit = 12,
   categoryIds?: number[],
-): Promise<ShopifyProduct[]> {
-  if (!isBigCommerceConfigured()) return [];
+): Promise<{ products: ShopifyProduct[]; total: number }> {
+  if (!isBigCommerceConfigured()) return { products: [], total: 0 };
   const catFilter = categoryIds?.length
     ? `&categories:in=${categoryIds.slice(0, 60).join(",")}`
     : "";
+  // sort=id gives stable pagination — total_sold ties made pages overlap.
   const json = (await bcGet(
-    `/catalog/products?limit=${limit}&page=${page}&include=images,variants&sort=total_sold&direction=desc${catFilter}`,
-  )) as { data?: any[] } | null;
-  return (json?.data ?? []).map(mapBcProduct);
+    `/catalog/products?limit=${limit}&page=${page}&include=images,variants&sort=id&direction=asc${catFilter}`,
+  )) as { data?: any[]; meta?: { pagination?: { total?: number } } } | null;
+  return {
+    products: (json?.data ?? []).map(mapBcProduct),
+    total: json?.meta?.pagination?.total ?? 0,
+  };
 }
 
 /** Total products / categories / brands — for the homepage stats bar. */

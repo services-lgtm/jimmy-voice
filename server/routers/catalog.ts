@@ -15,7 +15,7 @@ import {
   getBcCounts,
   type BcCategory,
 } from "../bigcommerce";
-import { demoListProducts, searchProducts } from "../shopify";
+import { demoListProducts, searchProducts, type ShopifyProduct } from "../shopify";
 
 // ─── Category cache ───────────────────────────────────────────────────────────
 // The tree changes rarely; cache for 10 minutes to keep pages snappy.
@@ -97,26 +97,30 @@ export const catalogRouter = router({
     .query(async ({ input }) => {
       if (input.query) {
         const products = await searchProducts(input.query, input.limit);
-        return { products };
+        return { products, total: products.length };
       }
       if (isBigCommerceConfigured()) {
         if (input.categoryId) {
           // Products live on leaf categories — include the whole subtree.
           const all = await getCategories();
           const ids = withDescendants(all, input.categoryId);
-          const products = await listBigCommerceProducts(input.page, input.limit, ids);
-          return { products };
+          const { products, total } = await listBigCommerceProducts(input.page, input.limit, ids);
+          return { products, total };
         }
         // Pull a wider pool and float products that have photos to the top —
         // much of the catalog is still missing images while the store ramps up.
-        const pool = await listBigCommerceProducts(input.page, Math.min(50, input.limit * 4));
+        const { products: pool, total } = await listBigCommerceProducts(
+          input.page,
+          Math.min(50, input.limit * 4),
+        );
         if (pool.length) {
           const withImage = pool.filter((p) => p.image);
           const withoutImage = pool.filter((p) => !p.image);
-          return { products: [...withImage, ...withoutImage].slice(0, input.limit) };
+          return { products: [...withImage, ...withoutImage].slice(0, input.limit), total };
         }
       }
-      return { products: demoListProducts(input.limit) };
+      const demo = demoListProducts(input.limit);
+      return { products: demo, total: demo.length };
     }),
 
   /** One product by id, plus "contractors also ordered" from its category. */
@@ -128,9 +132,11 @@ export const catalogRouter = router({
         return { product: demo, related: [] };
       }
       const product = await getBigCommerceProduct(input.id);
-      let related: Awaited<ReturnType<typeof listBigCommerceProducts>> = [];
+      let related: ShopifyProduct[] = [];
       if (product?.categoryIds?.length) {
-        const pool = await listBigCommerceProducts(1, 12, product.categoryIds).catch(() => []);
+        const pool = await listBigCommerceProducts(1, 12, product.categoryIds)
+          .then((r) => r.products)
+          .catch(() => [] as ShopifyProduct[]);
         related = pool
           .filter((p) => p.id !== product.id)
           .sort((a, b) => Number(!!b.image) - Number(!!a.image))

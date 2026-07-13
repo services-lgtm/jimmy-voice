@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearch } from "wouter";
 import { Search, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
-import ProductCard from "@/components/gbs/ProductCard";
+import ProductCard, { type ProductCardData } from "@/components/gbs/ProductCard";
 
 function useDebounced<T>(value: T, ms: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -48,13 +48,38 @@ export default function ShopPage() {
         "Category";
 
   const debouncedQ = useDebounced(query.trim(), 350);
+  const [page, setPage] = useState(1);
+  const [items, setItems] = useState<ProductCardData[]>([]);
+
+  // New search/category → start over from page 1
+  useEffect(() => {
+    setPage(1);
+    setItems([]);
+  }, [debouncedQ, catId]);
+
   const results = trpc.catalog.list.useQuery({
     query: debouncedQ || undefined,
     categoryId: debouncedQ ? undefined : (catId ?? undefined),
+    page,
     limit: 24,
   });
 
-  const products = results.data?.products ?? [];
+  // Accumulate pages (dedupe by id)
+  useEffect(() => {
+    const incoming = results.data?.products;
+    if (!incoming) return;
+    setItems((prev) => {
+      const base = page === 1 ? [] : prev;
+      const seen = new Set(base.map((p) => p.id));
+      return [...base, ...incoming.filter((p) => !seen.has(p.id))];
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [results.data]);
+
+  const products = items;
+  const total = results.data?.total ?? 0;
+  // Search results aren't paginated (single best-match batch); browse is.
+  const hasMore = !debouncedQ && total > products.length;
 
   function pickCategory(id: number | null) {
     setQuery("");
@@ -130,25 +155,40 @@ export default function ShopPage() {
 
       {/* Results */}
       <div className="mt-5 text-sm text-gbs-gray-500">
-        {results.isLoading
+        {results.isLoading && page === 1
           ? "Loading..."
-          : `${products.length} product${products.length === 1 ? "" : "s"}${
+          : `${(total || products.length).toLocaleString()} product${(total || products.length) === 1 ? "" : "s"}${
               debouncedQ ? ` for “${debouncedQ}”` : activeName ? ` in ${activeName}` : ""
-            }`}
+            }${hasMore ? ` · showing ${products.length}` : ""}`}
       </div>
 
-      {results.isLoading ? (
+      {results.isLoading && page === 1 ? (
         <div className="mt-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {Array.from({ length: 8 }).map((_, i) => (
             <div key={i} className="rounded-xl bg-gbs-gray-100 aspect-[3/4] animate-pulse" />
           ))}
         </div>
       ) : products.length ? (
-        <div className="mt-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {products.map((p) => (
-            <ProductCard key={p.id} product={p} />
-          ))}
-        </div>
+        <>
+          <div className="mt-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {products.map((p) => (
+              <ProductCard key={p.id} product={p} />
+            ))}
+          </div>
+          {hasMore && (
+            <div className="mt-8 flex justify-center">
+              <button
+                onClick={() => setPage((p) => p + 1)}
+                disabled={results.isFetching}
+                className="h-12 px-8 rounded-md border-[1.5px] border-gbs-red text-gbs-red font-condensed font-bold uppercase tracking-[0.08em] hover:bg-gbs-red-tint disabled:opacity-50 active:scale-[0.97] transition"
+              >
+                {results.isFetching
+                  ? "Loading..."
+                  : `Load more (${(total - products.length).toLocaleString()} left)`}
+              </button>
+            </div>
+          )}
+        </>
       ) : (
         <div className="mt-16 flex flex-col items-center text-center">
           <Search className="size-10 text-gbs-gray-300" />
