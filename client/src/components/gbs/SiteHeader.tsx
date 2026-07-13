@@ -4,8 +4,9 @@
  */
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Search, ShoppingCart, Sparkles } from "lucide-react";
+import { Search, ShoppingCart, Sparkles, User } from "lucide-react";
 import { useCart } from "@/contexts/CartContext";
+import { useAuth } from "@/contexts/AuthContext";
 
 const NAV_LINKS = [
   { href: "/shop", label: "Products" },
@@ -16,6 +17,7 @@ const NAV_LINKS = [
 
 export default function SiteHeader() {
   const { count } = useCart();
+  const { customer } = useAuth();
   const [location] = useLocation();
   const [scrolled, setScrolled] = useState(false);
 
@@ -70,6 +72,27 @@ export default function SiteHeader() {
           >
             <Search className="size-5" />
           </Link>
+          {customer ? (
+            <Link
+              href="/account"
+              aria-label="My account"
+              title={customer.name}
+              className="p-2 rounded-md hover:bg-gbs-gray-100 text-gbs-red"
+            >
+              <User className="size-5" />
+            </Link>
+          ) : (
+            <Link
+              href="/signin"
+              aria-label="Sign in"
+              className="flex items-center gap-1.5 px-2 md:px-2.5 py-2 rounded-md hover:bg-gbs-gray-100 text-gbs-black"
+            >
+              <User className="size-5" />
+              <span className="hidden md:inline font-condensed font-semibold uppercase tracking-[0.06em] text-[14px]">
+                Sign in
+              </span>
+            </Link>
+          )}
           <Link
             href="/cart"
             aria-label="Cart"
