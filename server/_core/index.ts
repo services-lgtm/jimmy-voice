@@ -7,6 +7,7 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { ensureRedirectMap, resolveRedirect } from "../redirects";
+import { ENV } from "./env";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -97,6 +98,22 @@ self.addEventListener('activate', function(e){
         .send(KILL_SW);
     });
   }
+
+  // ── BigCommerce storefront pass-through ─────────────────────────────────────
+  // BigCommerce still owns account/login/cart/checkout pages, but it thinks its
+  // primary domain is gobuildsupply.com (now us) and bounces those pages here.
+  // Forward any such request to BigCommerce's own domain so customer sign-in and
+  // order history work instead of hitting our NotFound page.
+  const BC_STOREFRONT =
+    /^\/(account|login|createaccount|create_account|account_confirm|forgotpassword|forgot_password|cart|checkout|wishlist|orderstatus|order_status)\.php/i;
+  app.use((req, res, next) => {
+    if (req.method !== "GET") return next();
+    if (BC_STOREFRONT.test(req.path) || req.path === "/checkout") {
+      res.redirect(302, `https://store-${ENV.bcStoreHash}-1.mybigcommerce.com${req.originalUrl}`);
+      return;
+    }
+    next();
+  });
 
   // ── Legacy URL rescue ───────────────────────────────────────────────────────
   // The domain used to run on BigCommerce. Google Shopping, old links, and

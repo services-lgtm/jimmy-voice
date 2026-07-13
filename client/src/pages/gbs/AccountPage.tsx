@@ -8,7 +8,12 @@ import { STORE_URL } from "@/lib/gbs";
 
 export default function AccountPage() {
   const rows = [
-    { icon: History, label: "Order history", href: `${STORE_URL}/account.php`, external: true },
+    {
+      icon: History,
+      label: "Order history",
+      href: "https://store-n9hvqo7nsn-1.mybigcommerce.com/login.php",
+      external: true,
+    },
     { icon: CreditCard, label: "Net 30 terms — apply", href: "/net30", external: false },
     { icon: Sparkles, label: "Jimmy AI", href: "/jimmy", external: false },
     { icon: Calculator, label: "Calculators", href: "/calculators", external: false },
