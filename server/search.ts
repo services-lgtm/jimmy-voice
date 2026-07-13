@@ -175,6 +175,28 @@ export function indexReady(): boolean {
   return docs.length > 0;
 }
 
+/**
+ * Products whose (lowercased) SKU passes `test`, with photographed items floated
+ * to the top, then paginated. Powers category/subcategory browsing off the
+ * spreadsheet taxonomy (see server/taxonomy.ts) without extra BigCommerce calls.
+ */
+export function filterCatalogBySku(
+  test: (sku: string) => boolean,
+  page: number,
+  limit: number,
+): { products: ShopifyProduct[]; total: number } {
+  ensureIndex();
+  const matched = docs.filter((d) => d.sku && test(d.sku));
+  // Stable sort keeps pagination consistent; photos first while images fill in.
+  matched.sort((a, b) => Number(!!b.product.image) - Number(!!a.product.image));
+  const total = matched.length;
+  const start = (page - 1) * limit;
+  return {
+    products: matched.slice(start, start + limit).map((d) => d.product),
+    total,
+  };
+}
+
 // ─── Scoring ──────────────────────────────────────────────────────────────────
 
 export function smartSearch(query: string, limit = 24): ShopifyProduct[] {

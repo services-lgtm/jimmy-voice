@@ -9,45 +9,16 @@ import { publicProcedure, router } from "../_core/trpc";
 import {
   isBigCommerceConfigured,
   listBigCommerceProducts,
-  listBigCommerceCategories,
   getBigCommerceProduct,
   createBigCommerceCheckout,
   getBcCounts,
-  type BcCategory,
 } from "../bigcommerce";
 import { demoListProducts, searchProducts, type ShopifyProduct } from "../shopify";
 import { ensureIndex, indexReady, smartSearch } from "../search";
+import { TAXONOMY, listByTaxonomy } from "../taxonomy";
 
 // Warm the smart-search index as soon as the server starts.
 ensureIndex();
-
-// ─── Category cache ───────────────────────────────────────────────────────────
-// The tree changes rarely; cache for 10 minutes to keep pages snappy.
-
-let catCache: { data: BcCategory[]; ts: number } | null = null;
-
-async function getCategories(): Promise<BcCategory[]> {
-  if (catCache && Date.now() - catCache.ts < 10 * 60 * 1000) return catCache.data;
-  const data = await listBigCommerceCategories();
-  if (data.length) catCache = { data, ts: Date.now() };
-  return data;
-}
-
-/** A category plus every category nested under it. */
-function withDescendants(all: BcCategory[], rootId: number): number[] {
-  const ids = [rootId];
-  const queue = [rootId];
-  while (queue.length) {
-    const parent = queue.shift()!;
-    for (const c of all) {
-      if (c.parentId === parent) {
-        ids.push(c.id);
-        queue.push(c.id);
-      }
-    }
-  }
-  return ids;
-}
 
 // Store-size stats for the hero (cached 10 min)
 let statsCache: { data: { products: number; categories: number; brands: number }; ts: number } | null = null;
@@ -62,30 +33,12 @@ export const catalogRouter = router({
   }),
 
   /**
-   * The store's real categories: the 19 main categories (Drywall, Lumber,
-   * Plumbing, ...) each with its own subcategories, exactly like the live
-   * store. Top departments ("Structure & Framing" etc.) only define order.
+   * The site organization: 19 categories → 218 subcategories, from the
+   * customer's taxonomy file (server/taxonomy.ts). This is what drives shop
+   * browsing — products are matched to it by SKU, not by BigCommerce's tree.
    */
-  categories: publicProcedure.query(async () => {
-    const all = await getCategories();
-    const usable = (c: BcCategory) => c.isVisible && !/^\d+$/.test(c.name.trim());
-    const tops = all
-      .filter((c) => c.parentId === 0 && usable(c) && !/^shop all$/i.test(c.name))
-      .sort((a, b) => a.sortOrder - b.sortOrder);
-    const groups = tops.flatMap((t) =>
-      all
-        .filter((c) => c.parentId === t.id && usable(c))
-        .sort((a, b) => a.sortOrder - b.sortOrder)
-        .map((cat) => ({
-          id: cat.id,
-          name: cat.name,
-          children: all
-            .filter((c) => c.parentId === cat.id && usable(c))
-            .sort((a, b) => a.sortOrder - b.sortOrder)
-            .map((c) => ({ id: c.id, name: c.name })),
-        })),
-    );
-    return { groups };
+  categories: publicProcedure.query(() => {
+    return { categories: TAXONOMY };
   }),
 
   /** Browse products — text search, category filter, or best sellers. */
@@ -93,7 +46,8 @@ export const catalogRouter = router({
     .input(
       z.object({
         query: z.string().trim().max(120).optional(),
-        categoryId: z.number().int().optional(),
+        catSlug: z.string().trim().max(80).optional(),
+        subSlug: z.string().trim().max(80).optional(),
         page: z.number().int().min(1).default(1),
         limit: z.number().int().min(1).max(50).default(12),
       }),
@@ -107,14 +61,13 @@ export const catalogRouter = router({
           : await searchProducts(input.query, input.limit);
         return { products, total: products.length };
       }
+      if (input.catSlug) {
+        // Browse by the customer's taxonomy — products matched by SKU against
+        // the in-memory catalog. Warm the index if this is an early hit.
+        ensureIndex();
+        return listByTaxonomy(input.catSlug, input.subSlug, input.page, input.limit);
+      }
       if (isBigCommerceConfigured()) {
-        if (input.categoryId) {
-          // Products live on leaf categories — include the whole subtree.
-          const all = await getCategories();
-          const ids = withDescendants(all, input.categoryId);
-          const { products, total } = await listBigCommerceProducts(input.page, input.limit, ids);
-          return { products, total };
-        }
         // Pull a wider pool and float products that have photos to the top —
         // much of the catalog is still missing images while the store ramps up.
         const { products: pool, total } = await listBigCommerceProducts(

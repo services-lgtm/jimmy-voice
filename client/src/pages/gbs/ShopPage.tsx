@@ -1,7 +1,7 @@
 /**
  * Search & browse — screen 06 + spec 6.4.
- * Category filters mirror the LIVE store tree (groups → subcategories);
- * text search still works across the whole catalog.
+ * Browsing is organized by the GBS taxonomy: 19 categories → 218 subcategories
+ * (from the customer's org file). Text search still spans the whole catalog.
  */
 import { useEffect, useMemo, useState } from "react";
 import { useSearch } from "wouter";
@@ -23,44 +23,37 @@ export default function ShopPage() {
   const search = useSearch();
   const params = useMemo(() => new URLSearchParams(search), [search]);
   const [query, setQuery] = useState(params.get("q") ?? "");
-  const [catId, setCatId] = useState<number | null>(
-    params.get("cat") ? Number(params.get("cat")) : null,
-  );
+  const [catSlug, setCatSlug] = useState<string | null>(params.get("cat"));
+  const [subSlug, setSubSlug] = useState<string | null>(params.get("sub"));
 
   // React to navigation (homepage tiles, nav links)
   useEffect(() => {
     setQuery(params.get("q") ?? "");
-    setCatId(params.get("cat") ? Number(params.get("cat")) : null);
+    setCatSlug(params.get("cat"));
+    setSubSlug(params.get("sub"));
   }, [params]);
 
   const categories = trpc.catalog.categories.useQuery();
-  const groups = categories.data?.groups ?? [];
+  const cats = categories.data?.categories ?? [];
 
-  // Which top group does the selected category belong to (for showing sub-chips)?
-  const activeGroup =
-    groups.find((g) => g.id === catId || g.children.some((c) => c.id === catId)) ?? null;
-  const activeName =
-    catId == null
-      ? null
-      : (activeGroup?.id === catId
-          ? activeGroup?.name
-          : activeGroup?.children.find((c) => c.id === catId)?.name) ??
-        params.get("name") ??
-        "Category";
+  const activeCat = cats.find((c) => c.slug === catSlug) ?? null;
+  const activeSub = activeCat?.subcategories.find((s) => s.slug === subSlug) ?? null;
+  const activeName = activeSub?.name ?? activeCat?.name ?? null;
 
   const debouncedQ = useDebounced(query.trim(), 350);
   const [page, setPage] = useState(1);
   const [items, setItems] = useState<ProductCardData[]>([]);
 
-  // New search/category → start over from page 1
+  // New search/category/subcategory → start over from page 1
   useEffect(() => {
     setPage(1);
     setItems([]);
-  }, [debouncedQ, catId]);
+  }, [debouncedQ, catSlug, subSlug]);
 
   const results = trpc.catalog.list.useQuery({
     query: debouncedQ || undefined,
-    categoryId: debouncedQ ? undefined : (catId ?? undefined),
+    catSlug: debouncedQ ? undefined : (catSlug ?? undefined),
+    subSlug: debouncedQ ? undefined : (subSlug ?? undefined),
     page,
     limit: 24,
   });
@@ -82,9 +75,14 @@ export default function ShopPage() {
   // Search results aren't paginated (single best-match batch); browse is.
   const hasMore = !debouncedQ && total > products.length;
 
-  function pickCategory(id: number | null) {
+  function pickCategory(slug: string | null) {
     setQuery("");
-    setCatId((prev) => (prev === id ? null : id));
+    setSubSlug(null);
+    setCatSlug((prev) => (prev === slug ? null : slug));
+  }
+  function pickSub(slug: string) {
+    setQuery("");
+    setSubSlug((prev) => (prev === slug ? null : slug));
   }
 
   return (
@@ -96,7 +94,10 @@ export default function ShopPage() {
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
-            if (e.target.value) setCatId(null);
+            if (e.target.value) {
+              setCatSlug(null);
+              setSubSlug(null);
+            }
           }}
           placeholder="Search 5,000+ products..."
           className="w-full h-13 py-3.5 pl-12 pr-11 rounded-md bg-gbs-gray-100 border-[1.5px] border-gbs-gray-300 focus:border-gbs-red focus:outline-none text-[15px] text-gbs-black placeholder:text-gbs-gray-500 transition-colors"
@@ -112,42 +113,42 @@ export default function ShopPage() {
         )}
       </div>
 
-      {/* Top-group chips — the store's real departments */}
+      {/* Category chips — the 19 GBS categories */}
       <div className="mt-4 flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 md:mx-0 md:px-0">
-        {groups.map((g) => {
-          const active = activeGroup?.id === g.id;
+        {cats.map((c) => {
+          const active = catSlug === c.slug;
           return (
             <button
-              key={g.id}
-              onClick={() => pickCategory(g.id)}
+              key={c.slug}
+              onClick={() => pickCategory(c.slug)}
               className={`shrink-0 rounded-full px-3.5 py-1.5 text-[13px] font-medium border-[1.5px] transition ${
                 active
                   ? "bg-gbs-red border-gbs-red text-white"
                   : "border-gbs-gray-300 text-gbs-gray-700 hover:border-gbs-red hover:text-gbs-red"
               }`}
             >
-              {g.name}
+              {c.name}
             </button>
           );
         })}
       </div>
 
-      {/* Subcategory chips for the active group */}
-      {activeGroup && (
+      {/* Subcategory chips for the active category */}
+      {activeCat && (
         <div className="mt-2 flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 md:mx-0 md:px-0">
-          {activeGroup.children.map((c) => {
-            const active = catId === c.id;
+          {activeCat.subcategories.map((s) => {
+            const active = subSlug === s.slug;
             return (
               <button
-                key={c.id}
-                onClick={() => pickCategory(c.id)}
+                key={s.slug}
+                onClick={() => pickSub(s.slug)}
                 className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium border transition ${
                   active
                     ? "bg-gbs-black border-gbs-black text-white"
                     : "border-gbs-gray-300 text-gbs-gray-500 hover:border-gbs-black hover:text-gbs-black"
                 }`}
               >
-                {c.name}
+                {s.name}
               </button>
             );
           })}
@@ -212,13 +213,13 @@ export default function ShopPage() {
             Try a different search or browse categories.
           </p>
           <div className="mt-4 flex flex-wrap justify-center gap-2 max-w-md">
-            {groups.map((g) => (
+            {cats.map((c) => (
               <button
-                key={g.id}
-                onClick={() => pickCategory(g.id)}
+                key={c.slug}
+                onClick={() => pickCategory(c.slug)}
                 className="rounded-full border-[1.5px] border-gbs-gray-300 px-3.5 py-1.5 text-[13px] font-medium text-gbs-gray-700 hover:border-gbs-red hover:text-gbs-red transition"
               >
-                {g.name}
+                {c.name}
               </button>
             ))}
           </div>

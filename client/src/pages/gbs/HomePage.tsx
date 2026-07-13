@@ -47,7 +47,7 @@ export default function HomePage() {
   useScrollReveal();
   const featured = trpc.catalog.list.useQuery({ limit: 8 });
   const categories = trpc.catalog.categories.useQuery();
-  const tiles = categories.data?.groups ?? [];
+  const tiles = categories.data?.categories ?? [];
 
   return (
     <div>
@@ -87,8 +87,8 @@ export default function HomePage() {
                 const s = categoryStyle(c.name);
                 return (
                   <Link
-                    key={c.id}
-                    href={`/shop?cat=${c.id}&name=${encodeURIComponent(c.name)}`}
+                    key={c.slug}
+                    href={`/shop?cat=${c.slug}`}
                     className="w-28 shrink-0 bg-white rounded-xl border border-gbs-gray-100 shadow-sm aspect-square flex flex-col items-center justify-center gap-2 px-2 hover:border-gbs-red active:scale-[0.98] transition"
                   >
                     <span
