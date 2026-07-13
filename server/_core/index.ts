@@ -6,6 +6,7 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import { ensureRedirectMap, resolveRedirect } from "../redirects";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -66,6 +67,33 @@ async function startServer() {
       createContext,
     })
   );
+
+  // ── Legacy URL rescue ───────────────────────────────────────────────────────
+  // The domain used to run on BigCommerce. Google Shopping, old links, and
+  // search results point at the old product/category URLs. Redirect those to
+  // the matching page on the new site so shoppers don't hit the NotFound page.
+  ensureRedirectMap();
+  app.use((req, res, next) => {
+    const p = req.path;
+    if (
+      req.method !== "GET" ||
+      p.startsWith("/api") ||
+      p.startsWith("/assets") ||
+      p.startsWith("/brand") ||
+      p.startsWith("/@") || // vite dev internals
+      p.startsWith("/src") ||
+      p.includes(".") // files: .js, .css, .ico, images, fonts
+    ) {
+      return next();
+    }
+    ensureRedirectMap();
+    const target = resolveRedirect(p);
+    if (target) {
+      res.redirect(301, target);
+      return;
+    }
+    next();
+  });
 
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);
